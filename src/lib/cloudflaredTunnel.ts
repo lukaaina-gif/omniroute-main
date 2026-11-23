@@ -200,14 +200,33 @@ async function readStateFile(): Promise<PersistedTunnelState> {
   }
 }
 
-async function writeStateFile(state: PersistedTunnelState) {
+// Serialize state-file writes so concurrent handlers (stderr/exit) cannot interleave
+// and leave trailing bytes after the JSON document.
+let stateWriteQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueStateWrite<T>(task: () => Promise<T>): Promise<T> {
+  const run = stateWriteQueue.then(task, task);
+  stateWriteQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function writeStateFileAtomic(state: PersistedTunnelState) {
   await ensureTunnelDir();
-  await fs.writeFile(getStateFilePath(), JSON.stringify(state, null, 2) + "\n", "utf8");
+  const filePath = getStateFilePath();
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tempPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  await fs.rename(tempPath, filePath);
+}
+
+async function writeStateFile(state: PersistedTunnelState) {
+  await enqueueStateWrite(() => writeStateFileAtomic(state));
 }
 
 async function updateStateFile(patch: PersistedTunnelState) {
-  const current = await readStateFile();
-  await writeStateFile({ ...current, ...patch });
+  await enqueueStateWrite(async () => {
+    const current = await readStateFile();
+    await writeStateFileAtomic({ ...current, ...patch });
+  });
 }
 
 async function clearPidFile() {
