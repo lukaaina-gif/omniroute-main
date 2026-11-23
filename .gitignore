@@ -34,7 +34,7 @@ coverage**
 # production
 /build
 /app
-cloud/*
+/cloud/*
 
 # misc
 .DS_Store
@@ -111,7 +111,7 @@ open-sse/test/*
 test-results/
 playwright-report/
 blob-report/
-cloud/
+/cloud/
 
 # Security Analysis (standalone project with own git)
 security-analysis/
